@@ -1,6 +1,7 @@
 """
 🛠️ TOOL DEFINITIONS & EXECUTION BACKEND
 Mã nguồn chứa danh sách Tool Schemas (JSON Schema) và Execution Layer phục vụ cho MCP Server.
+Chủ đề: Trợ lý Báo cáo Tình trạng Pin & Lốp xe VinFast GreenSM.
 """
 
 import json
@@ -11,41 +12,44 @@ from typing import Dict, Any
 # ==============================================================================
 
 TOOLS_SCHEMA = [
-    # Tool 1: Đã được định nghĩa mẫu sẵn cho Học viên tham khảo
+    # Tool 1: Tra cứu tình trạng Pin & Lốp xe theo biển số
     {
-        "name": "academic_query",
-        "description": "Tra cứu hồ sơ và thông tin học vụ của sinh viên VinUni bằng mã sinh viên.",
+        "name": "vehicle_status_query",
+        "description": "Tra cứu tình trạng pin (dung lượng, sức khỏe pin) và tình trạng lốp (áp suất, độ mòn) của xe VinFast GreenSM bằng biển số xe.",
         "parameters": {
             "type": "object",
             "properties": {
-                "student_id": {
+                "license_plate": {
                     "type": "string",
-                    "description": "Mã sinh viên cần tra cứu (ví dụ: 'SV2026001')"
+                    "description": "Biển số xe VinFast GreenSM cần tra cứu (ví dụ: '51K-88888')"
                 }
             },
-            "required": ["student_id"]
+            "required": ["license_plate"]
         }
     },
-    
-    # --------------------------------------------------------------------------
-    # TODO 1.2: HỌC VIÊN HOÀN THIỆN TOOL SCHEMA CHO 'schedule_appointment'
-    # 🎯 YÊU CẦU THIẾT KẾ SCHEMA (JSON SCHEMA STANDARD):
-    # 1. Tool dùng để đặt lịch hẹn tư vấn học vụ với Cố vấn học tập VinUni.
-    # 2. Thiết kế các tham số (properties) để LLM trích xuất:
-    #    - student_id (string): Mã sinh viên cần đặt lịch (ví dụ: 'SV2026001')
-    #    - datetime_str (string): Thời gian hẹn (ví dụ: '14:00 15/09/2026')
-    #    - advisor_name (string): Tên cố vấn học tập
-    # 3. Khai báo danh sách các trường bắt buộc (required).
-    # --------------------------------------------------------------------------
+
+    # Tool 2: Tạo yêu cầu bảo dưỡng/báo cáo sự cố Pin hoặc Lốp
     {
-        "name": "schedule_appointment",
-        "description": "Đặt lịch hẹn tư vấn học vụ với Cố vấn học tập VinUni.",
+        "name": "create_maintenance_request",
+        "description": "Tạo yêu cầu bảo dưỡng hoặc báo cáo sự cố về Pin/Lốp cho xe VinFast GreenSM tại trạm dịch vụ.",
         "parameters": {
             "type": "object",
             "properties": {
-                # TODO 1.2: Khai báo các thuộc tính tham số cho Tool tại đây...
+                "license_plate": {
+                    "type": "string",
+                    "description": "Biển số xe cần đặt lịch bảo dưỡng (ví dụ: '51K-88888')"
+                },
+                "issue_type": {
+                    "type": "string",
+                    "description": "Loại sự cố cần xử lý: 'battery' (pin) hoặc 'tire' (lốp)",
+                    "enum": ["battery", "tire"]
+                },
+                "preferred_datetime": {
+                    "type": "string",
+                    "description": "Thời gian mong muốn đến trạm dịch vụ (ví dụ: '09:00 20/09/2026')"
+                }
             },
-            "required": [] # TODO 1.2: Khai báo danh sách các trường bắt buộc tại đây...
+            "required": ["license_plate", "issue_type", "preferred_datetime"]
         }
     }
 ]
@@ -55,57 +59,62 @@ TOOLS_SCHEMA = [
 # ==============================================================================
 
 MOCK_DATABASE = {
-    "SV2026001": {
-        "full_name": "Nguyễn Văn An",
-        "class": "AI-K4",
-        "gpa": 3.85,
-        "email": "an.nv@vinuni.edu.vn",
-        "status": "Đang học",
-        "advisor": "PGS.TS Nguyễn Văn A"
+    "51K-88888": {
+        "model": "VinFast VF e34",
+        "battery_percent": 42,
+        "battery_health": "Tốt (98% dung lượng thiết kế)",
+        "estimated_range_km": 132,
+        "tire_pressure_psi": {"truoc_trai": 32, "truoc_phai": 32, "sau_trai": 30, "sau_phai": 30},
+        "tire_wear_percent": 65,
+        "status": "Đang hoạt động bình thường"
     },
-    "SV2026002": {
-        "full_name": "Trần Thị Bình",
-        "class": "AI-K4",
-        "gpa": 3.60,
-        "email": "binh.tt@vinuni.edu.vn",
-        "status": "Đang học",
-        "advisor": "TS. Lê Thị B"
+    "30G-12345": {
+        "model": "VinFast VF 8",
+        "battery_percent": 15,
+        "battery_health": "Cần kiểm tra (dung lượng sụt nhanh)",
+        "estimated_range_km": 38,
+        "tire_pressure_psi": {"truoc_trai": 28, "truoc_phai": 27, "sau_trai": 29, "sau_phai": 29},
+        "tire_wear_percent": 88,
+        "status": "Cảnh báo: Pin yếu & Lốp mòn nhiều"
     }
 }
 
 
-def execute_academic_query(student_id: str) -> str:
-    """Thực thi tra cứu học vụ theo mã sinh viên"""
-    student = MOCK_DATABASE.get(student_id.strip().upper())
-    if student:
+def execute_vehicle_status_query(license_plate: str) -> str:
+    """Thực thi tra cứu tình trạng Pin & Lốp theo biển số xe"""
+    plate = license_plate.strip().upper()
+    vehicle = MOCK_DATABASE.get(plate)
+    if vehicle:
         return json.dumps({
             "status": "SUCCESS",
-            "student_id": student_id,
-            "data": student
+            "license_plate": plate,
+            "data": vehicle
         }, ensure_ascii=False)
     else:
         return json.dumps({
             "status": "NOT_FOUND",
-            "message": f"Không tìm thấy dữ liệu sinh viên có mã '{student_id}'"
+            "message": f"Không tìm thấy dữ liệu xe có biển số '{license_plate}' trong hệ thống GreenSM."
         }, ensure_ascii=False)
 
 
-def execute_schedule_appointment(student_id: str, datetime_str: str, advisor_name: str = "PGS.TS Nguyễn Văn A") -> str:
-    """Thực thi đặt lịch hẹn tư vấn học vụ"""
+def execute_create_maintenance_request(license_plate: str, issue_type: str, preferred_datetime: str) -> str:
+    """Thực thi tạo yêu cầu bảo dưỡng/báo cáo sự cố Pin hoặc Lốp"""
+    plate = license_plate.strip().upper()
+    issue_label = "Pin" if issue_type == "battery" else "Lốp"
     return json.dumps({
         "status": "SUCCESS",
-        "booking_id": f"BK-{student_id}-99",
-        "student_id": student_id,
-        "datetime": datetime_str,
-        "advisor": advisor_name,
-        "message": f"Đặt lịch thành công cho sinh viên {student_id} với {advisor_name} vào lúc {datetime_str}."
+        "request_id": f"REQ-{plate}-{issue_type.upper()}",
+        "license_plate": plate,
+        "issue_type": issue_type,
+        "datetime": preferred_datetime,
+        "message": f"Đã tạo yêu cầu bảo dưỡng {issue_label} cho xe {plate} vào lúc {preferred_datetime}. Vui lòng đến trạm dịch vụ GreenSM gần nhất đúng giờ hẹn."
     }, ensure_ascii=False)
 
 
 # Router gọi tool thực tế
 TOOL_ROUTER = {
-    "academic_query": execute_academic_query,
-    "schedule_appointment": execute_schedule_appointment
+    "vehicle_status_query": execute_vehicle_status_query,
+    "create_maintenance_request": execute_create_maintenance_request
 }
 
 def dispatch_tool_call(tool_name: str, arguments: Dict[str, Any]) -> str:

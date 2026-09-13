@@ -1,0 +1,37 @@
+[
+  {
+    "id": "TC01",
+    "type": "direct_query",
+    "question": "Chào bạn, VinFast GreenSM là dịch vụ gì vậy?",
+    "expected_behavior": "Chatbot trả lời trực tiếp từ System Prompt, không cần gọi bất kỳ Tool nào.",
+    "complexity": "Low"
+  },
+  {
+    "id": "TC02",
+    "type": "single_tool_query",
+    "question": "Hãy tra cứu tình trạng pin và lốp của xe biển số 51K-88888.",
+    "expected_behavior": "Agent nhận diện nhu cầu tra cứu, tự động phát sinh Tool Call 'vehicle_status_query' với biển số 51K-88888.",
+    "complexity": "Medium"
+  },
+  {
+    "id": "TC03",
+    "type": "maintenance_booking",
+    "question": "Xe biển số 30G-12345 đang báo pin yếu, hãy tạo yêu cầu bảo dưỡng pin cho xe này vào lúc 09:00 ngày 20/09/2026.",
+    "expected_behavior": "Agent tự động phát sinh Tool Call 'create_maintenance_request' với đúng biển số, loại sự cố (battery) và thời gian.",
+    "complexity": "Medium"
+  },
+  {
+    "id": "TC04",
+    "type": "multi_step_reasoning",
+    "question": "Hãy tra cứu tình trạng lốp của xe biển số 30G-12345, nếu lốp mòn trên 80% thì tạo luôn yêu cầu bảo dưỡng lốp vào lúc 10:00 ngày 21/09/2026.",
+    "expected_behavior": "Agent thực hiện chuỗi suy luận ReAct: Tra cứu tình trạng lốp trước, sau đó tiến hành tạo yêu cầu bảo dưỡng dựa trên kết quả quan sát.",
+    "complexity": "High"
+  },
+  {
+    "id": "TC05",
+    "type": "edge_case_handling",
+    "question": "Hãy tra cứu tình trạng pin và lốp của xe biển số 99Z-00000.",
+    "expected_behavior": "Agent nhận kết quả NOT_FOUND từ Tool và đưa ra phản hồi lịch sự, chính xác không bịa đặt dữ liệu.",
+    "complexity": "Medium"
+  }
+]

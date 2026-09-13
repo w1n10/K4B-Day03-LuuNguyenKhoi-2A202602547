@@ -4,6 +4,7 @@ Hỗ trợ Native Tool Calling và chuyển đổi linh hoạt qua biến môi t
 """
 
 import os
+import re
 import sys
 import json
 from typing import Dict, Any, List
@@ -36,27 +37,53 @@ class MockOfflineProvider(BaseLLMProvider):
 
     def generate_with_tools(self, prompt: str, tools_schema: List[Dict[str, Any]], system_prompt: str = "") -> Dict[str, Any]:
         prompt_lower = prompt.lower()
-        
-        # Mô phỏng nhận diện intent gọi Tool
-        if "sv2026001" in prompt_lower and "đặt lịch" in prompt_lower:
+
+        plate_match = re.search(r'\d{2}[A-Za-z]-\d{4,5}', prompt.upper())
+        plate = plate_match.group(0) if plate_match else "51K-88888"
+
+        # Vòng lặp tiếp theo trong cùng phiên ReAct (đã có ít nhất 1 Observation trước đó)
+        if "lịch sử các bước đã thực hiện" in prompt_lower:
+            already_requested = "request_id" in prompt_lower
+            tire_match = re.search(r'"tire_wear_percent":\s*(\d+)', prompt)
+            tire_wear = int(tire_match.group(1)) if tire_match else None
+            wants_conditional_maintenance = "nếu" in prompt_lower and "bảo dưỡng" in prompt_lower
+
+            if wants_conditional_maintenance and tire_wear is not None and tire_wear > 80 and not already_requested:
+                dt_matches = re.findall(r'\d{2}:\d{2}\s+ng[àa]y\s+\d{2}/\d{2}/\d{4}', prompt_lower)
+                preferred_dt = dt_matches[-1] if dt_matches else "09:00 20/09/2026"
+                return {
+                    "type": "tool_call",
+                    "tool_name": "create_maintenance_request",
+                    "arguments": {"license_plate": plate, "issue_type": "tire", "preferred_datetime": preferred_dt},
+                    "thought": f"Quan sát thấy lốp xe {plate} đã mòn {tire_wear}%, vượt ngưỡng người dùng nêu. Tôi sẽ gọi tool create_maintenance_request."
+                }
             return {
-                "type": "tool_call",
-                "tool_name": "schedule_appointment",
-                "arguments": {"student_id": "SV2026001", "datetime_str": "14:00 15/09/2026", "advisor_name": "PGS.TS Nguyễn Văn A"},
-                "thought": "Người dùng yêu cầu đặt lịch hẹn tư vấn cho sinh viên SV2026001. Tôi sẽ gọi tool schedule_appointment."
+                "type": "text",
+                "content": "[Mock Agent Response]: Đã tổng hợp đầy đủ dữ liệu quan sát được từ các bước trước, không cần thêm hành động nào khác.",
+                "thought": "Đã có đủ Observation từ các bước trước, tổng hợp câu trả lời cuối cùng."
             }
-        elif "sv2026001" in prompt_lower or "tra cứu" in prompt_lower:
+
+        # Mô phỏng nhận diện intent gọi Tool cho lượt hỏi đầu tiên
+        if ("bảo dưỡng" in prompt_lower or "báo cáo sự cố" in prompt_lower) and ("pin" in prompt_lower or "lốp" in prompt_lower) and "nếu" not in prompt_lower:
+            issue_type = "battery" if "pin" in prompt_lower else "tire"
             return {
                 "type": "tool_call",
-                "tool_name": "academic_query",
-                "arguments": {"student_id": "SV2026001"},
-                "thought": "Người dùng muốn tra cứu thông tin học vụ của sinh viên SV2026001. Tôi sẽ gọi tool academic_query."
+                "tool_name": "create_maintenance_request",
+                "arguments": {"license_plate": plate, "issue_type": issue_type, "preferred_datetime": "09:00 20/09/2026"},
+                "thought": "Người dùng yêu cầu tạo yêu cầu bảo dưỡng cho xe. Tôi sẽ gọi tool create_maintenance_request."
+            }
+        elif "biển số" in prompt_lower or "tình trạng" in prompt_lower or "pin" in prompt_lower or "lốp" in prompt_lower:
+            return {
+                "type": "tool_call",
+                "tool_name": "vehicle_status_query",
+                "arguments": {"license_plate": plate},
+                "thought": "Người dùng muốn tra cứu tình trạng Pin/Lốp của xe. Tôi sẽ gọi tool vehicle_status_query."
             }
         else:
             return {
                 "type": "text",
-                "content": f"[Mock Agent Response]: Xin chào! Quy chế học vụ VinUni yêu cầu sinh viên tích lũy tối thiểu 120 tín chỉ và duy trì GPA trên 2.0 để tốt nghiệp.",
-                "thought": "Câu hỏi chung về quy chế học vụ, trả lời trực tiếp không cần gọi Tool."
+                "content": "[Mock Agent Response]: Xin chào! VinFast GreenSM là dịch vụ taxi điện sử dụng 100% xe điện VinFast, cam kết vận hành xanh và an toàn cho khách hàng.",
+                "thought": "Câu hỏi chung về dịch vụ GreenSM, trả lời trực tiếp không cần gọi Tool."
             }
 
 
